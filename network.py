@@ -2,14 +2,32 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader
 
 BOTTOM_DIM = 10
 TOP_DIM = 10
 NUM_LAYERS = 1
 BATCH_SIZE = 5
-
-
+NUM_EPOCHS = 1
 LEARNING_RATE = 0.05
+ITERATIONS = 50
+
+
+class InputPairsDataset(Dataset):
+    def __init__(self, num_samples, input_dim):
+        # Generate pairs of indices, ensuring they match in your desired way
+        # For simplicity, using identity matrix pairs here as placeholders
+        self.bottom_inputs = [torch.eye(input_dim)[i].reshape(1, -1).squeeze(0) for i in range(input_dim)]
+        self.top_inputs = [torch.eye(input_dim)[i].reshape(1, -1).squeeze(0) for i in range(input_dim)]
+
+        self.input_dim = input_dim
+        self.num_samples = num_samples
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+        return self.bottom_inputs[idx % self.input_dim], self.top_inputs[idx % self.input_dim]
 
 
 class LayerLocalNetwork(nn.Module):
@@ -84,11 +102,38 @@ class LayerLocalNetwork(nn.Module):
         return loss
 
 
+dataset = InputPairsDataset(num_samples=100, input_dim=10)
+dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+
 # Example usage:
 model = LayerLocalNetwork(bottom_dim=BOTTOM_DIM, top_dim=TOP_DIM, num_layers=NUM_LAYERS, batch_size=BATCH_SIZE)
+
+
+for epoch in range(NUM_EPOCHS):
+    print("Epoch:", epoch)
+    for bottom_input, top_input in dataloader:
+        for i in range(ITERATIONS):
+            loss = model(bottom_input, top_input)
+            print("Loss:", f"{loss.item(): .2f}")
+    print()
+
+print("======TRYING NEGATIVE SAMPLES======")
+
+
 bottom_input = torch.eye(10)[0].reshape(1, -1)  # One-hot vector for bottom input
-top_input = torch.eye(10)[0].reshape(1, -1)    # One-hot vector for top input
+top_input = torch.eye(10)[1].reshape(1, -1)    # One-hot vector for top input
 
 for i in range(75):
     loss = model(bottom_input, top_input)
     print("Loss:", f"{loss.item(): .2f}")
+
+
+print("======TRYING POSITIVE SAMPLE AGAIN======")
+
+for epoch in range(NUM_EPOCHS):
+    print("Epoch:", epoch)
+    for bottom_input, top_input in dataloader:
+        for i in range(ITERATIONS):
+            loss = model(bottom_input, top_input)
+            print("Loss:", f"{loss.item(): .2f}")
+    print()
