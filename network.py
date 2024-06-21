@@ -3,11 +3,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
+BOTTOM_DIM = 10
+TOP_DIM = 10
+NUM_LAYERS = 1
+BATCH_SIZE = 5
+
+
 LEARNING_RATE = 0.05
 
 
 class LayerLocalNetwork(nn.Module):
-    def __init__(self, input_dim, output_dim, num_layers=1, batch_size=1):
+    def __init__(self, bottom_dim, top_dim, num_layers=1, batch_size=1):
         super().__init__()
         self.num_layers = num_layers
         self.layers = nn.ModuleList()
@@ -15,9 +21,9 @@ class LayerLocalNetwork(nn.Module):
 
         for _ in range(num_layers):
             layer = {
-                'bottom_up': nn.Parameter(torch.randn(input_dim, output_dim)),
-                'top_down': nn.Parameter(torch.randn(output_dim, output_dim)),
-                'recurrent': nn.Parameter(torch.randn(output_dim, output_dim))
+                'bottom_up': nn.Parameter(torch.randn(bottom_dim, top_dim)),
+                'top_down': nn.Parameter(torch.randn(top_dim, top_dim)),
+                'recurrent': nn.Parameter(torch.randn(top_dim, top_dim))
             }
             self.layers.append(nn.ParameterDict(layer))
             self.optimizers.append({
@@ -26,7 +32,7 @@ class LayerLocalNetwork(nn.Module):
                 'recurrent': optim.Adam([layer['recurrent']], lr=LEARNING_RATE),
             })
 
-        self.activations = [torch.zeros(batch_size, output_dim) for _ in range(num_layers)]
+        self.activations = [torch.zeros(batch_size, top_dim) for _ in range(num_layers)]
 
     def forward(self, bottom_input, top_input):
         for i, layer in enumerate(self.layers):
@@ -79,7 +85,7 @@ class LayerLocalNetwork(nn.Module):
 
 
 # Example usage:
-model = LayerLocalNetwork(input_dim=10, output_dim=10, num_layers=1, batch_size=5)
+model = LayerLocalNetwork(bottom_dim=BOTTOM_DIM, top_dim=TOP_DIM, num_layers=NUM_LAYERS, batch_size=BATCH_SIZE)
 bottom_input = torch.eye(10)[0].reshape(1, -1)  # One-hot vector for bottom input
 top_input = torch.eye(10)[0].reshape(1, -1)    # One-hot vector for top input
 
