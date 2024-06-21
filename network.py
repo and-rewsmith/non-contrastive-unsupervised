@@ -79,16 +79,18 @@ class LayerLocalNetwork(nn.Module):
         return loss
 
     def compute_loss(self):
-        # Standard loss computation
+        # Push energy down proportional to activations
         running_sum = 0
         for act in self.activations:
             running_sum += torch.mean(act.pow(2))
         standard_loss = running_sum / len(self.activations)
 
-        # Hebbian loss computation
+        # Hebbian loss computation: encourage variance at neuron level
         hebbian_loss = 0
         for act in self.activations:
             hebbian_loss += self.generate_lpl_loss_hebbian(act)
+
+        # TODO: predictive and decorrelative losses
 
         # Combine losses
         total_loss = standard_loss + hebbian_loss  # Consider weighting factors if necessary
