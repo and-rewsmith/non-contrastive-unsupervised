@@ -1,7 +1,5 @@
 from collections import deque
 import math
-import random
-import time
 
 from torch import Tensor
 import torch
@@ -17,6 +15,10 @@ BATCH_SIZE = 5
 NUM_EPOCHS = 1
 LEARNING_RATE = 0.05
 ITERATIONS = 50
+
+STANDARD_LOSS_SCALE = 30
+HEBBIAN_LOSS_SCALE = 1
+PREDICTIVE_LOSS_SCALE = 10
 
 
 class InputPairsDataset(Dataset):
@@ -114,6 +116,8 @@ class LayerLocalNetwork(nn.Module):
 
         return loss
 
+    # TODO: maybe this should be FF similar softmax
+    # TODO: decorrelative loss
     def compute_energy(self, old_activations: Tensor):
         # Push energy down proportional to activations
         running_sum = 0
@@ -127,7 +131,6 @@ class LayerLocalNetwork(nn.Module):
         for act in self.activations:
             hebbian_loss += self.generate_lpl_loss_hebbian(act)
 
-        # TODO: predictive and decorrelative losses
         predictive_loss = 0
         for i, act in enumerate(self.activations):
             individual_predictive_loss = (act - old_activations[i]) ** 2
@@ -137,17 +140,14 @@ class LayerLocalNetwork(nn.Module):
             predictive_loss += individual_predictive_loss
 
         # Combine losses
-        standard_loss = 30 * standard_loss
-        hebbian_loss = 1 * hebbian_loss
-        predictive_loss = 10 * predictive_loss
+        standard_loss = STANDARD_LOSS_SCALE * standard_loss
+        hebbian_loss = HEBBIAN_LOSS_SCALE * hebbian_loss
+        predictive_loss = PREDICTIVE_LOSS_SCALE * predictive_loss
 
-        # print(f"s: {standard_loss_scale * standard_loss} | h: {hebbian_loss} | p: {predictive_loss}")
-        total_loss = standard_loss + hebbian_loss + predictive_loss  # Consider weighting factors if necessary
+        total_loss = standard_loss + hebbian_loss + predictive_loss
         wandb.log({"standard_loss": standard_loss, "hebbian_loss": hebbian_loss,
                   "predictive_loss": predictive_loss, "total_loss": total_loss})
 
-        # total_loss = standard_loss
-        # print(f"standard_loss: {standard_loss} | hebbian_loss: {hebbian_loss}")
         return total_loss
 
     def generate_lpl_loss_hebbian(self, activations):
@@ -158,23 +158,7 @@ class LayerLocalNetwork(nn.Module):
         return loss
 
 
-class ActivationDecoder(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super().__init__()
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc4 = nn.Linear(hidden_dim, output_dim)
-
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = self.fc4(x)
-
-
 if __name__ == "__main__":
-
     # Set print options for tensors
     torch.set_printoptions(threshold=5000, edgeitems=2000)
     torch.manual_seed(1234)
@@ -195,17 +179,7 @@ if __name__ == "__main__":
     # Example usage:
     model = LayerLocalNetwork(bottom_dim=INPUT_DIM, top_dim=INPUT_DIM, num_layers=NUM_LAYERS, batch_size=BATCH_SIZE)
 
-    # %%
-    # for epoch in range(NUM_EPOCHS):
-    #     print("Epoch:", epoch)
-    #     for bottom_input, top_input, next_input in dataloader:
-    #         for i in range(ITERATIONS):
-    #             energy = model(bottom_input, top_input)
-    #             # layer_activations = torch.stack([layer_activations.clone() for layer_activations in model.activations], dim=1).reshape(-1, INPUT_DIM)
-    #             print("Energy:", f"{energy.item(): .2f}")
-    #         print("-----")
-    #     print()
-
+    print("======TRYING POSITIVE SAMPLE FULL BATCH SIZE======")
     wandb.log({"scenario": 0})
 
     num_epochs = 20
@@ -213,76 +187,22 @@ if __name__ == "__main__":
         print("Epoch:", epoch)
         for bottom_input, top_input, _ in dataloader:
             running_sum = 0
-            # layer_activations_queue = deque(maxlen=10)
             for i in range(ITERATIONS):
                 loss = model(bottom_input, top_input)
                 running_sum += loss.item()
-                # print("Loss:", f"{loss.item(): .2f}")
-
-                # layer_activations = torch.stack([layer_activations.clone() for layer_activations in model.activations], dim=1).reshape(-1, INPUT_DIM)
-                # layer_activations_queue.append(layer_activations)
-
-                # input_to_decoder = torch.stack(list(layer_activations_queue), dim=1)
-                # print("layer activations shape: ", layer_activations.shape)
-                # print("shape: ", input_to_decoder.shape)
-
                 wandb.log({"energy": loss.item()})
 
             wandb.log({"average_energy": running_sum / ITERATIONS})
-
-            # # if epoch > num_epochs - 3:
-            # if epoch > 0:
-            #     print("Average Loss:", f"{running_sum / ITERATIONS: .3f}")
-
-            # print("----")
-        print()
-
-    # print("======TRYING NEGATIVE SAMPLES======")
-    # wandb.log({"scenario": 1})
-
-    # for optimizer_dict in model.optimizers:
-    #     for optimizer in optimizer_dict.values():
-    #         for param_group in optimizer.param_groups:
-    #             # param_group['lr'] = param_group['lr'] / BATCH_SIZE
-    #             param_group['lr'] = 0
-
-    # bottom_input = torch.eye(10)[0].reshape(1, -1)  # One-hot vector for bottom input
-    # top_input = torch.eye(10)[1].reshape(1, -1)    # One-hot vector for top input
-    # assert bottom_input.shape == (1, INPUT_DIM)
-    # assert top_input.shape == (1, INPUT_DIM)
-
-    # running_sum = 0
-    # negative_iterations = 30
-    # for i in range(negative_iterations):
-    #     loss = model(bottom_input, top_input)
-    #     running_sum += loss.item()
-    #     print("Loss:", f"{loss.item(): .2f}")
-    # print("Average Loss:", f"{running_sum / negative_iterations: .3f}")
 
     print("======TRYING POSITIVE SAMPLE LOW BATCH SIZE======")
-    wandb.log({"scenario": 2})
+    wandb.log({"scenario": 1})
     model.resize_activations(2)
 
-    # bottom_input = torch.eye(10)[0].reshape(1, -1)  # One-hot vector for bottom input
-    # top_input = torch.eye(10)[0].reshape(1, -1)    # One-hot vector for top input
-
-    # running_sum = 0
-    # positive_iterations = 30
-    # for i in range(positive_iterations):
-    #     loss = model(bottom_input, top_input)
-    #     running_sum += loss.item()
-    #     print("Loss:", f"{loss.item(): .2f}")
-    # print("Average Loss:", f"{running_sum / positive_iterations: .3f}")
-
     for epoch in range(20):
         print("Epoch:", epoch)
         for bottom_input, top_input, _ in dataloader:
             running_sum = 0
             for i in range(ITERATIONS):
-                # bottom_input = bottom_input[0].unsqueeze(0).repeat(BATCH_SIZE, 1)
-                # top_input = bottom_input[0].unsqueeze(0).repeat(BATCH_SIZE, 1)
-                # assert bottom_input.shape == (BATCH_SIZE, INPUT_DIM)
-                # assert top_input.shape == (BATCH_SIZE, INPUT_DIM)
                 bottom_input = bottom_input[0:2]
                 top_input = bottom_input[0:2]
                 assert bottom_input.shape == (2, INPUT_DIM)
@@ -291,25 +211,16 @@ if __name__ == "__main__":
                 loss = model(bottom_input, top_input)
                 running_sum += loss.item()
                 wandb.log({"energy": loss.item()})
-                # print("Loss:", f"{loss.item(): .2f}")
-            # print("Average Loss:", f"{running_sum / ITERATIONS: .3f}")
             wandb.log({"average_energy": running_sum / ITERATIONS})
-            # print("----")
-        print()
 
     print("======TRYING NEGATIVE SAMPLES LOW BATCH SIZE======")
-    wandb.log({"scenario": 3})
-    time.sleep(2)
+    wandb.log({"scenario": 2})
 
     for epoch in range(20):
         print("Epoch:", epoch)
         for bottom_input, top_input, _ in dataloader:
             running_sum = 0
             for i in range(ITERATIONS):
-                # bottom_input = bottom_input[0].unsqueeze(0).repeat(BATCH_SIZE, 1)
-                # top_input = bottom_input[0].unsqueeze(0).repeat(BATCH_SIZE, 1)
-                # assert bottom_input.shape == (BATCH_SIZE, INPUT_DIM)
-                # assert top_input.shape == (BATCH_SIZE, INPUT_DIM)
                 bottom_input = bottom_input[0:2]
                 top_input = bottom_input[0:2]
                 assert bottom_input.shape == (2, INPUT_DIM)
@@ -318,29 +229,4 @@ if __name__ == "__main__":
                 loss = model(bottom_input, top_input)
                 running_sum += loss.item()
                 wandb.log({"energy": loss.item()})
-                # print("Loss:", f"{loss.item(): .2f}")
-            # print("Average Loss:", f"{running_sum / ITERATIONS: .3f}")
             wandb.log({"average_energy": running_sum / ITERATIONS})
-            # print("----")
-        print()
-
-    # bottom_input = torch.eye(10)[0].reshape(1, -1)  # One-hot vector for bottom input
-    # top_input = torch.eye(10)[1].reshape(1, -1)    # One-hot vector for top input
-    # assert bottom_input.shape == (1, INPUT_DIM)
-    # assert top_input.shape == (1, INPUT_DIM)
-
-    # running_sum = 0
-    # negative_iterations = 500
-    # for i in range(negative_iterations):
-    #     # random int from 0 to 9
-    #     rand_int = random.randint(0, 9)
-    #     bottom_input = torch.eye(10)[0].reshape(1, -1)  # One-hot vector for bottom input
-    #     top_input = torch.eye(10)[rand_int].reshape(1, -1)    # One-hot vector for top input
-    #     loss = model(bottom_input, top_input)
-    #     running_sum += loss.item()
-    #     # print("Loss:", f"{loss.item(): .2f}")
-    #     wandb.log({"energy": loss.item()})
-
-    # wandb.log({"average_energy": running_sum / ITERATIONS})
-
-    # print("Average Loss:", f"{running_sum / negative_iterations: .3f}")
