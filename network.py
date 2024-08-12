@@ -9,18 +9,19 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import wandb
 
+ITERATIONS = 75
+NUM_EPOCHS = 20
+
 INPUT_DIM = 10
-NUM_LAYERS = 2
-BATCH_SIZE = 5
-NUM_EPOCHS = 1
-LEARNING_RATE = 0.05
-ITERATIONS = 50
+NUM_LAYERS = 3
+BATCH_SIZE = 10
+LEARNING_RATE = 0.0005
 
 # STANDARD_LOSS_SCALE = 30
 # HEBBIAN_LOSS_SCALE = 1
 # PREDICTIVE_LOSS_SCALE = 10
 
-STANDARD_LOSS_SCALE = 1
+STANDARD_LOSS_SCALE = 40
 HEBBIAN_LOSS_SCALE = 1
 PREDICTIVE_LOSS_SCALE = 1
 
@@ -148,9 +149,15 @@ class LayerLocalNetwork(nn.Module):
         hebbian_loss = HEBBIAN_LOSS_SCALE * hebbian_loss
         predictive_loss = PREDICTIVE_LOSS_SCALE * predictive_loss
 
-        total_loss = standard_loss + hebbian_loss + predictive_loss
-        wandb.log({"standard_loss": standard_loss, "hebbian_loss": hebbian_loss,
-                  "predictive_loss": predictive_loss, "total_loss": total_loss})
+        # total_loss = standard_loss + hebbian_loss + predictive_loss
+        # wandb.log({"standard_loss": standard_loss, "hebbian_loss": hebbian_loss,
+        #           "predictive_loss": predictive_loss, "total_loss": total_loss})
+
+        # total_loss = standard_loss
+        # wandb.log({"standard_loss": standard_loss, "total_loss": total_loss})
+
+        total_loss = standard_loss + hebbian_loss
+        wandb.log({"standard_loss": standard_loss, "hebbian_loss": hebbian_loss, "total_loss": total_loss})
 
         return total_loss, standard_loss
 
@@ -186,8 +193,7 @@ if __name__ == "__main__":
     print("======TRYING POSITIVE SAMPLE FULL BATCH SIZE======")
     wandb.log({"scenario": 0})
 
-    num_epochs = 50
-    for epoch in range(num_epochs):
+    for epoch in range(NUM_EPOCHS):
         print("Epoch:", epoch)
         for bottom_input, top_input, _ in dataloader:
             running_sum = 0
@@ -198,24 +204,25 @@ if __name__ == "__main__":
 
             wandb.log({"average_energy": running_sum / ITERATIONS})
 
-    # print("======TRYING POSITIVE SAMPLE LOW BATCH SIZE======")
-    # wandb.log({"scenario": 1})
-    # model.resize_activations(2)
+    print("======TRYING POSITIVE SAMPLE LOW BATCH SIZE======")
+    wandb.log({"scenario": 1})
+    new_batch_size = 5
+    model.resize_activations(new_batch_size)
 
-    # for epoch in range(20):
-    #     print("Epoch:", epoch)
-    #     for bottom_input, top_input, _ in dataloader:
-    #         running_sum = 0
-    #         for i in range(ITERATIONS):
-    #             bottom_input = bottom_input[0:2]
-    #             top_input = bottom_input[0:2]
-    #             assert bottom_input.shape == (2, INPUT_DIM)
-    #             assert top_input.shape == (2, INPUT_DIM)
+    for epoch in range(NUM_EPOCHS):
+        print("Epoch:", epoch)
+        for bottom_input, top_input, _ in dataloader:
+            running_sum = 0
+            for i in range(ITERATIONS):
+                bottom_input = bottom_input[0:new_batch_size]
+                top_input = bottom_input[0:new_batch_size]
+                assert bottom_input.shape == (new_batch_size, INPUT_DIM)
+                assert top_input.shape == (new_batch_size, INPUT_DIM)
 
-    #             loss = model(bottom_input, top_input)
-    #             running_sum += loss.item()
-    #             wandb.log({"energy": loss.item()})
-    #         wandb.log({"average_energy": running_sum / ITERATIONS})
+                loss, energy = model(bottom_input, top_input)
+                running_sum += energy.item()
+                wandb.log({"energy": energy})
+            wandb.log({"average_energy": running_sum / ITERATIONS})
 
     # print("======TRYING NEGATIVE SAMPLES LOW BATCH SIZE======")
     # wandb.log({"scenario": 2})
