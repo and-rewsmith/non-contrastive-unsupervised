@@ -9,6 +9,12 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import wandb
 
+"""
+TODO: 
+- computation graph
+- predictive loss
+"""
+
 ITERATIONS = 50
 NUM_EPOCHS = 60
 
