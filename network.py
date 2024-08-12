@@ -9,13 +9,13 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import wandb
 
-ITERATIONS = 75
-NUM_EPOCHS = 20
+ITERATIONS = 50
+NUM_EPOCHS = 100
 
 INPUT_DIM = 10
 NUM_LAYERS = 2
 BATCH_SIZE = 10
-LEARNING_RATE = 0.005
+LEARNING_RATE = 0.01
 
 HIDDEN_DIM = 10
 
@@ -23,8 +23,8 @@ HIDDEN_DIM = 10
 # HEBBIAN_LOSS_SCALE = 1
 # PREDICTIVE_LOSS_SCALE = 10
 
-STANDARD_LOSS_SCALE = 40
-HEBBIAN_LOSS_SCALE = 1
+STANDARD_LOSS_SCALE = 30
+HEBBIAN_LOSS_SCALE = 15
 PREDICTIVE_LOSS_SCALE = 1
 
 
@@ -99,17 +99,18 @@ class LayerLocalNetwork(nn.Module):
         old_activations = [act.detach().clone() for act in self.activations]
         for i, layer in enumerate(self.layers):
             bottom_up_act = torch.mm(bottom_input.detach(), layer['bottom_up']) if i == 0 else torch.mm(
-                self.activations[i-1], layer['bottom_up'])
+                old_activations[i-1], layer['bottom_up'])
             top_down_act = torch.mm(top_input.detach(), layer['top_down']) if i == self.num_layers - 1 else torch.mm(
-                self.activations[i+1], layer['top_down'])
-            recurrent_act = torch.mm(self.activations[i], layer['recurrent'])
+                old_activations[i+1], layer['top_down'])
+            recurrent_act = torch.mm(old_activations[i], layer['recurrent'])
 
             total_input = bottom_up_act + top_down_act + recurrent_act
             total_input = F.leaky_relu(total_input)
             # print("total_input: ", total_input.mean())
-            self.activations[i] = torch.clamp(total_input, min=-1, max=1)
+            # self.activations[i] = torch.clamp(total_input, min=-1, max=1)
+            self.activations[i] = total_input
 
-        loss, energy = self.compute_energy(old_activations)
+        loss, energy = self.compute_energy(self.activations)
         loss.backward()
         # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1, norm_type=2)
 
@@ -138,18 +139,18 @@ class LayerLocalNetwork(nn.Module):
         for act in self.activations:
             hebbian_loss += self.generate_lpl_loss_hebbian(act)
 
-        predictive_loss = 0
-        for i, act in enumerate(self.activations):
-            individual_predictive_loss = (act - old_activations[i]) ** 2
-            individual_predictive_loss = torch.sum(individual_predictive_loss, dim=1)
-            individual_predictive_loss = torch.sum(individual_predictive_loss, dim=0)
-            individual_predictive_loss = individual_predictive_loss / (2 * act.shape[0] * act.shape[1])
-            predictive_loss += individual_predictive_loss
+        # predictive_loss = 0
+        # for i, act in enumerate(self.activations):
+        #     individual_predictive_loss = (act - old_activations[i]) ** 2
+        #     individual_predictive_loss = torch.sum(individual_predictive_loss, dim=1)
+        #     individual_predictive_loss = torch.sum(individual_predictive_loss, dim=0)
+        #     individual_predictive_loss = individual_predictive_loss / (2 * act.shape[0] * act.shape[1])
+        #     predictive_loss += individual_predictive_loss
 
         # Combine losses
         standard_loss = STANDARD_LOSS_SCALE * standard_loss
         hebbian_loss = HEBBIAN_LOSS_SCALE * hebbian_loss
-        predictive_loss = PREDICTIVE_LOSS_SCALE * predictive_loss
+        # predictive_loss = PREDICTIVE_LOSS_SCALE * predictive_loss
 
         # total_loss = standard_loss + hebbian_loss + predictive_loss
         # wandb.log({"standard_loss": standard_loss, "hebbian_loss": hebbian_loss,
@@ -214,6 +215,7 @@ if __name__ == "__main__":
         for bottom_input, top_input, _ in dataloader:
             # shuffle the top input along first dimension
             top_input = top_input[torch.randperm(top_input.size()[0])]
+            bottom_input = bottom_input[torch.randperm(bottom_input.size()[0])]
 
             running_sum = 0
             for i in range(ITERATIONS):
