@@ -8,19 +8,14 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import wandb
-
-"""
-TODO: 
-- computation graph
-- predictive loss
-"""
+import torchviz
 
 ITERATIONS = 50
 NUM_EPOCHS = 60
 
 INPUT_DIM = 10
-NUM_LAYERS = 2
-BATCH_SIZE = 10
+NUM_LAYERS = 3
+BATCH_SIZE = 15
 LEARNING_RATE = 0.001
 
 HIDDEN_DIM = 10
@@ -112,13 +107,17 @@ class LayerLocalNetwork(nn.Module):
 
             total_input = bottom_up_act + top_down_act + recurrent_act
             total_input = F.leaky_relu(total_input)
-            # print("total_input: ", total_input.mean())
             # self.activations[i] = torch.clamp(total_input, min=-1, max=1)
             self.activations[i] = total_input
 
-        loss, energy = self.compute_energy(self.activations)
+        loss, energy = self.compute_energy()
         loss.backward()
         # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1, norm_type=2)
+
+        # make dot and save to png
+        # dot = torchviz.make_dot(loss)
+        # dot.render("network", format="png")
+        # input()
 
         for i, layer in enumerate(self.layers):
             self.optimizers[i]['bottom_up'].step()
@@ -132,7 +131,7 @@ class LayerLocalNetwork(nn.Module):
 
     # TODO: maybe this should be FF similar softmax
     # TODO: decorrelative loss
-    def compute_energy(self, old_activations: Tensor):
+    def compute_energy(self):
         # Push energy down proportional to activations
         running_sum = 0
         for act in self.activations:
