@@ -204,8 +204,24 @@ if __name__ == "__main__":
 
             wandb.log({"average_energy": running_sum / ITERATIONS})
 
-    print("======TRYING POSITIVE SAMPLE LOW BATCH SIZE======")
+    print("======TRYING NEGATIVE SAMPLES FULL BATCH SIZE======")
     wandb.log({"scenario": 1})
+
+    for epoch in range(NUM_EPOCHS):
+        print("Epoch:", epoch)
+        for bottom_input, top_input, _ in dataloader:
+            running_sum = 0
+            for i in range(ITERATIONS):
+                # for every top vec in batch, make it a one hot vector with first index as 1
+                top_input = torch.eye(INPUT_DIM)[0].reshape(1, -1).repeat(BATCH_SIZE, 1)
+
+                loss, energy = model(bottom_input, top_input)
+                running_sum += energy.item()
+                wandb.log({"energy": energy})
+            wandb.log({"average_energy": running_sum / ITERATIONS})
+
+    print("======TRYING POSITIVE SAMPLE LOW BATCH SIZE======")
+    wandb.log({"scenario": 2})
     new_batch_size = 5
     model.resize_activations(new_batch_size)
 
@@ -224,20 +240,24 @@ if __name__ == "__main__":
                 wandb.log({"energy": energy})
             wandb.log({"average_energy": running_sum / ITERATIONS})
 
-    # print("======TRYING NEGATIVE SAMPLES LOW BATCH SIZE======")
-    # wandb.log({"scenario": 2})
+    print("======TRYING NEGATIVE SAMPLES LOW BATCH SIZE======")
+    wandb.log({"scenario": 3})
+    new_batch_size = 5
 
-    # for epoch in range(20):
-    #     print("Epoch:", epoch)
-    #     for bottom_input, top_input, _ in dataloader:
-    #         running_sum = 0
-    #         for i in range(ITERATIONS):
-    #             bottom_input = bottom_input[0:2]
-    #             top_input = bottom_input[0:2]
-    #             assert bottom_input.shape == (2, INPUT_DIM)
-    #             assert top_input.shape == (2, INPUT_DIM)
+    for epoch in range(NUM_EPOCHS):
+        print("Epoch:", epoch)
+        for bottom_input, top_input, _ in dataloader:
+            running_sum = 0
+            for i in range(ITERATIONS):
+                bottom_input = bottom_input[0:new_batch_size]
+                top_input = bottom_input[0:new_batch_size]
+                assert bottom_input.shape == (new_batch_size, INPUT_DIM)
+                assert top_input.shape == (new_batch_size, INPUT_DIM)
 
-    #             loss = model(bottom_input, top_input)
-    #             running_sum += loss.item()
-    #             wandb.log({"energy": loss.item()})
-    #         wandb.log({"average_energy": running_sum / ITERATIONS})
+                # for every top vec in batch, make it a one hot vector with first index as 1
+                top_input = torch.eye(INPUT_DIM)[0].reshape(1, -1).repeat(new_batch_size, 1)
+
+                loss, energy = model(bottom_input, top_input)
+                running_sum += energy.item()
+                wandb.log({"energy": energy})
+            wandb.log({"average_energy": running_sum / ITERATIONS})
