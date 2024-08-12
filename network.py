@@ -13,9 +13,11 @@ ITERATIONS = 75
 NUM_EPOCHS = 20
 
 INPUT_DIM = 10
-NUM_LAYERS = 3
+NUM_LAYERS = 2
 BATCH_SIZE = 10
-LEARNING_RATE = 0.0005
+LEARNING_RATE = 0.005
+
+HIDDEN_DIM = 10
 
 # STANDARD_LOSS_SCALE = 30
 # HEBBIAN_LOSS_SCALE = 1
@@ -61,9 +63,9 @@ class LayerLocalNetwork(nn.Module):
 
         for n in range(num_layers):
             layer = {
-                'bottom_up': nn.Parameter(torch.randn(bottom_dim, top_dim)),
-                'top_down': nn.Parameter(torch.randn(top_dim, top_dim)),
-                'recurrent': nn.Parameter(torch.randn(top_dim, top_dim))
+                'bottom_up': nn.Parameter(torch.randn(HIDDEN_DIM, HIDDEN_DIM)),
+                'top_down': nn.Parameter(torch.randn(HIDDEN_DIM, HIDDEN_DIM)),
+                'recurrent': nn.Parameter(torch.randn(HIDDEN_DIM, HIDDEN_DIM))
             }
 
             if n == num_layers - 1:
@@ -210,54 +212,54 @@ if __name__ == "__main__":
     for epoch in range(NUM_EPOCHS):
         print("Epoch:", epoch)
         for bottom_input, top_input, _ in dataloader:
+            # shuffle the top input along first dimension
+            top_input = top_input[torch.randperm(top_input.size()[0])]
+
             running_sum = 0
             for i in range(ITERATIONS):
-                # for every top vec in batch, make it a one hot vector with first index as 1
-                top_input = torch.eye(INPUT_DIM)[0].reshape(1, -1).repeat(BATCH_SIZE, 1)
-
                 loss, energy = model(bottom_input, top_input)
                 running_sum += energy.item()
                 wandb.log({"energy": energy})
             wandb.log({"average_energy": running_sum / ITERATIONS})
 
-    print("======TRYING POSITIVE SAMPLE LOW BATCH SIZE======")
-    wandb.log({"scenario": 2})
-    new_batch_size = 5
-    model.resize_activations(new_batch_size)
+    # print("======TRYING POSITIVE SAMPLE LOW BATCH SIZE======")
+    # wandb.log({"scenario": 2})
+    # new_batch_size = 5
+    # model.resize_activations(new_batch_size)
 
-    for epoch in range(NUM_EPOCHS):
-        print("Epoch:", epoch)
-        for bottom_input, top_input, _ in dataloader:
-            running_sum = 0
-            for i in range(ITERATIONS):
-                bottom_input = bottom_input[0:new_batch_size]
-                top_input = bottom_input[0:new_batch_size]
-                assert bottom_input.shape == (new_batch_size, INPUT_DIM)
-                assert top_input.shape == (new_batch_size, INPUT_DIM)
+    # for epoch in range(NUM_EPOCHS):
+    #     print("Epoch:", epoch)
+    #     for bottom_input, top_input, _ in dataloader:
+    #         running_sum = 0
+    #         for i in range(ITERATIONS):
+    #             bottom_input = bottom_input[0:new_batch_size]
+    #             top_input = bottom_input[0:new_batch_size]
+    #             assert bottom_input.shape == (new_batch_size, INPUT_DIM)
+    #             assert top_input.shape == (new_batch_size, INPUT_DIM)
 
-                loss, energy = model(bottom_input, top_input)
-                running_sum += energy.item()
-                wandb.log({"energy": energy})
-            wandb.log({"average_energy": running_sum / ITERATIONS})
+    #             loss, energy = model(bottom_input, top_input)
+    #             running_sum += energy.item()
+    #             wandb.log({"energy": energy})
+    #         wandb.log({"average_energy": running_sum / ITERATIONS})
 
-    print("======TRYING NEGATIVE SAMPLES LOW BATCH SIZE======")
-    wandb.log({"scenario": 3})
-    new_batch_size = 5
+    # print("======TRYING NEGATIVE SAMPLES LOW BATCH SIZE======")
+    # wandb.log({"scenario": 3})
+    # new_batch_size = 5
 
-    for epoch in range(NUM_EPOCHS):
-        print("Epoch:", epoch)
-        for bottom_input, top_input, _ in dataloader:
-            running_sum = 0
-            for i in range(ITERATIONS):
-                bottom_input = bottom_input[0:new_batch_size]
-                top_input = bottom_input[0:new_batch_size]
-                assert bottom_input.shape == (new_batch_size, INPUT_DIM)
-                assert top_input.shape == (new_batch_size, INPUT_DIM)
+    # for epoch in range(NUM_EPOCHS):
+    #     print("Epoch:", epoch)
+    #     for bottom_input, top_input, _ in dataloader:
+    #         running_sum = 0
+    #         for i in range(ITERATIONS):
+    #             bottom_input = bottom_input[0:new_batch_size]
+    #             top_input = bottom_input[0:new_batch_size]
+    #             assert bottom_input.shape == (new_batch_size, INPUT_DIM)
+    #             assert top_input.shape == (new_batch_size, INPUT_DIM)
 
-                # for every top vec in batch, make it a one hot vector with first index as 1
-                top_input = torch.eye(INPUT_DIM)[0].reshape(1, -1).repeat(new_batch_size, 1)
+    #             # for every top vec in batch, make it a one hot vector with first index as 1
+    #             top_input = torch.eye(INPUT_DIM)[0].reshape(1, -1).repeat(new_batch_size, 1)
 
-                loss, energy = model(bottom_input, top_input)
-                running_sum += energy.item()
-                wandb.log({"energy": energy})
-            wandb.log({"average_energy": running_sum / ITERATIONS})
+    #             loss, energy = model(bottom_input, top_input)
+    #             running_sum += energy.item()
+    #             wandb.log({"energy": energy})
+    #         wandb.log({"average_energy": running_sum / ITERATIONS})
