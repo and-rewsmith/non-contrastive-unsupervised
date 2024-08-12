@@ -10,15 +10,19 @@ from torch.utils.data import Dataset, DataLoader
 import wandb
 
 INPUT_DIM = 10
-NUM_LAYERS = 3
+NUM_LAYERS = 2
 BATCH_SIZE = 5
 NUM_EPOCHS = 1
 LEARNING_RATE = 0.05
 ITERATIONS = 50
 
-STANDARD_LOSS_SCALE = 30
+# STANDARD_LOSS_SCALE = 30
+# HEBBIAN_LOSS_SCALE = 1
+# PREDICTIVE_LOSS_SCALE = 10
+
+STANDARD_LOSS_SCALE = 1
 HEBBIAN_LOSS_SCALE = 1
-PREDICTIVE_LOSS_SCALE = 10
+PREDICTIVE_LOSS_SCALE = 1
 
 
 class InputPairsDataset(Dataset):
@@ -102,7 +106,7 @@ class LayerLocalNetwork(nn.Module):
             # print("total_input: ", total_input.mean())
             self.activations[i] = torch.clamp(total_input, min=-1, max=1)
 
-        loss = self.compute_energy(old_activations)
+        loss, energy = self.compute_energy(old_activations)
         loss.backward()
         # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1, norm_type=2)
 
@@ -114,7 +118,7 @@ class LayerLocalNetwork(nn.Module):
         for i in range(0, len(self.activations)):
             self.activations[i] = self.activations[i].detach()
 
-        return loss
+        return loss, energy
 
     # TODO: maybe this should be FF similar softmax
     # TODO: decorrelative loss
@@ -148,7 +152,7 @@ class LayerLocalNetwork(nn.Module):
         wandb.log({"standard_loss": standard_loss, "hebbian_loss": hebbian_loss,
                   "predictive_loss": predictive_loss, "total_loss": total_loss})
 
-        return total_loss
+        return total_loss, standard_loss
 
     def generate_lpl_loss_hebbian(self, activations):
         mean_act = torch.mean(activations, dim=0)
@@ -182,51 +186,51 @@ if __name__ == "__main__":
     print("======TRYING POSITIVE SAMPLE FULL BATCH SIZE======")
     wandb.log({"scenario": 0})
 
-    num_epochs = 20
+    num_epochs = 50
     for epoch in range(num_epochs):
         print("Epoch:", epoch)
         for bottom_input, top_input, _ in dataloader:
             running_sum = 0
             for i in range(ITERATIONS):
-                loss = model(bottom_input, top_input)
-                running_sum += loss.item()
-                wandb.log({"energy": loss.item()})
+                loss, energy = model(bottom_input, top_input)
+                running_sum += energy.item()
+                wandb.log({"energy": energy})
 
             wandb.log({"average_energy": running_sum / ITERATIONS})
 
-    print("======TRYING POSITIVE SAMPLE LOW BATCH SIZE======")
-    wandb.log({"scenario": 1})
-    model.resize_activations(2)
+    # print("======TRYING POSITIVE SAMPLE LOW BATCH SIZE======")
+    # wandb.log({"scenario": 1})
+    # model.resize_activations(2)
 
-    for epoch in range(20):
-        print("Epoch:", epoch)
-        for bottom_input, top_input, _ in dataloader:
-            running_sum = 0
-            for i in range(ITERATIONS):
-                bottom_input = bottom_input[0:2]
-                top_input = bottom_input[0:2]
-                assert bottom_input.shape == (2, INPUT_DIM)
-                assert top_input.shape == (2, INPUT_DIM)
+    # for epoch in range(20):
+    #     print("Epoch:", epoch)
+    #     for bottom_input, top_input, _ in dataloader:
+    #         running_sum = 0
+    #         for i in range(ITERATIONS):
+    #             bottom_input = bottom_input[0:2]
+    #             top_input = bottom_input[0:2]
+    #             assert bottom_input.shape == (2, INPUT_DIM)
+    #             assert top_input.shape == (2, INPUT_DIM)
 
-                loss = model(bottom_input, top_input)
-                running_sum += loss.item()
-                wandb.log({"energy": loss.item()})
-            wandb.log({"average_energy": running_sum / ITERATIONS})
+    #             loss = model(bottom_input, top_input)
+    #             running_sum += loss.item()
+    #             wandb.log({"energy": loss.item()})
+    #         wandb.log({"average_energy": running_sum / ITERATIONS})
 
-    print("======TRYING NEGATIVE SAMPLES LOW BATCH SIZE======")
-    wandb.log({"scenario": 2})
+    # print("======TRYING NEGATIVE SAMPLES LOW BATCH SIZE======")
+    # wandb.log({"scenario": 2})
 
-    for epoch in range(20):
-        print("Epoch:", epoch)
-        for bottom_input, top_input, _ in dataloader:
-            running_sum = 0
-            for i in range(ITERATIONS):
-                bottom_input = bottom_input[0:2]
-                top_input = bottom_input[0:2]
-                assert bottom_input.shape == (2, INPUT_DIM)
-                assert top_input.shape == (2, INPUT_DIM)
+    # for epoch in range(20):
+    #     print("Epoch:", epoch)
+    #     for bottom_input, top_input, _ in dataloader:
+    #         running_sum = 0
+    #         for i in range(ITERATIONS):
+    #             bottom_input = bottom_input[0:2]
+    #             top_input = bottom_input[0:2]
+    #             assert bottom_input.shape == (2, INPUT_DIM)
+    #             assert top_input.shape == (2, INPUT_DIM)
 
-                loss = model(bottom_input, top_input)
-                running_sum += loss.item()
-                wandb.log({"energy": loss.item()})
-            wandb.log({"average_energy": running_sum / ITERATIONS})
+    #             loss = model(bottom_input, top_input)
+    #             running_sum += loss.item()
+    #             wandb.log({"energy": loss.item()})
+    #         wandb.log({"average_energy": running_sum / ITERATIONS})
