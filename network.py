@@ -1,14 +1,11 @@
-from collections import deque
 import math
 
-from torch import Tensor
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import wandb
-import torchviz
 
 ITERATIONS = 50
 NUM_EPOCHS = 40
@@ -16,7 +13,7 @@ NUM_EPOCHS = 40
 INPUT_DIM = 10
 NUM_LAYERS = 2
 BATCH_SIZE = 15
-LEARNING_RATE = 0.0001
+LEARNING_RATE = 0.00001
 
 HIDDEN_DIM = 10
 
@@ -24,8 +21,8 @@ HIDDEN_DIM = 10
 # HEBBIAN_LOSS_SCALE = 1
 # PREDICTIVE_LOSS_SCALE = 10
 
-STANDARD_LOSS_SCALE = 1
-HEBBIAN_LOSS_SCALE = 10
+STANDARD_LOSS_SCALE = 5
+HEBBIAN_LOSS_SCALE = 1
 PREDICTIVE_LOSS_SCALE = 5
 
 
@@ -165,7 +162,14 @@ class LayerLocalNetwork(nn.Module):
         # wandb.log({"standard_loss": standard_loss, "total_loss": total_loss})
 
         total_loss = standard_loss + hebbian_loss
-        wandb.log({"standard_loss": standard_loss, "hebbian_loss": hebbian_loss, "total_loss": total_loss})
+
+        activations_average_l2_norm = 0
+        for act in self.activations:
+            activations_average_l2_norm += torch.mean(torch.norm(act, dim=1))
+        activations_average_l2_norm = activations_average_l2_norm / len(self.activations)
+
+        wandb.log({"standard_loss": standard_loss, "hebbian_loss": hebbian_loss,
+                  "total_loss": total_loss, "activations_average_l2_norm": activations_average_l2_norm})
 
         return total_loss, standard_loss
 
