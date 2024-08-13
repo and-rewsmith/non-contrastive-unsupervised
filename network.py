@@ -11,12 +11,12 @@ import wandb
 import torchviz
 
 ITERATIONS = 50
-NUM_EPOCHS = 60
+NUM_EPOCHS = 40
 
 INPUT_DIM = 10
-NUM_LAYERS = 3
+NUM_LAYERS = 2
 BATCH_SIZE = 15
-LEARNING_RATE = 0.001
+LEARNING_RATE = 0.0001
 
 HIDDEN_DIM = 10
 
@@ -25,8 +25,8 @@ HIDDEN_DIM = 10
 # PREDICTIVE_LOSS_SCALE = 10
 
 STANDARD_LOSS_SCALE = 1
-HEBBIAN_LOSS_SCALE = 1
-PREDICTIVE_LOSS_SCALE = 1
+HEBBIAN_LOSS_SCALE = 10
+PREDICTIVE_LOSS_SCALE = 5
 
 
 class InputPairsDataset(Dataset):
@@ -84,7 +84,7 @@ class LayerLocalNetwork(nn.Module):
                 'recurrent': optim.Adam([layer['recurrent']], lr=LEARNING_RATE),
             })
 
-        self.activations = [torch.zeros(batch_size, top_dim) for _ in range(num_layers)]
+        self.activations = [torch.zeros(batch_size, HIDDEN_DIM) for _ in range(num_layers)]
 
     def resize_activations(self, new_batch_size):
         # don't zero activations, just trim them
@@ -110,7 +110,7 @@ class LayerLocalNetwork(nn.Module):
             # self.activations[i] = torch.clamp(total_input, min=-1, max=1)
             self.activations[i] = total_input
 
-        loss, energy = self.compute_energy()
+        loss, energy = self.compute_energy(old_activations)
         loss.backward()
         # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1, norm_type=2)
 
@@ -131,7 +131,7 @@ class LayerLocalNetwork(nn.Module):
 
     # TODO: maybe this should be FF similar softmax
     # TODO: decorrelative loss
-    def compute_energy(self):
+    def compute_energy(self, old_activations):
         # Push energy down proportional to activations
         running_sum = 0
         for act in self.activations:
@@ -144,28 +144,28 @@ class LayerLocalNetwork(nn.Module):
         for act in self.activations:
             hebbian_loss += self.generate_lpl_loss_hebbian(act)
 
-        # predictive_loss = 0
-        # for i, act in enumerate(self.activations):
-        #     individual_predictive_loss = (act - old_activations[i]) ** 2
-        #     individual_predictive_loss = torch.sum(individual_predictive_loss, dim=1)
-        #     individual_predictive_loss = torch.sum(individual_predictive_loss, dim=0)
-        #     individual_predictive_loss = individual_predictive_loss / (2 * act.shape[0] * act.shape[1])
-        #     predictive_loss += individual_predictive_loss
+        predictive_loss = 0
+        for i, act in enumerate(self.activations):
+            individual_predictive_loss = (act - old_activations[i]) ** 2
+            individual_predictive_loss = torch.sum(individual_predictive_loss, dim=1)
+            individual_predictive_loss = torch.sum(individual_predictive_loss, dim=0)
+            individual_predictive_loss = individual_predictive_loss / (2 * act.shape[0] * act.shape[1])
+            predictive_loss += individual_predictive_loss
 
         # Combine losses
         standard_loss = STANDARD_LOSS_SCALE * standard_loss
         hebbian_loss = HEBBIAN_LOSS_SCALE * hebbian_loss
-        # predictive_loss = PREDICTIVE_LOSS_SCALE * predictive_loss
+        predictive_loss = PREDICTIVE_LOSS_SCALE * predictive_loss
 
-        # total_loss = standard_loss + hebbian_loss + predictive_loss
-        # wandb.log({"standard_loss": standard_loss, "hebbian_loss": hebbian_loss,
-        #           "predictive_loss": predictive_loss, "total_loss": total_loss})
+        total_loss = standard_loss + hebbian_loss + predictive_loss
+        wandb.log({"standard_loss": standard_loss, "hebbian_loss": hebbian_loss,
+                  "predictive_loss": predictive_loss, "total_loss": total_loss})
 
         # total_loss = standard_loss
         # wandb.log({"standard_loss": standard_loss, "total_loss": total_loss})
 
-        total_loss = standard_loss + hebbian_loss
-        wandb.log({"standard_loss": standard_loss, "hebbian_loss": hebbian_loss, "total_loss": total_loss})
+        # total_loss = standard_loss + hebbian_loss
+        # wandb.log({"standard_loss": standard_loss, "hebbian_loss": hebbian_loss, "total_loss": total_loss})
 
         return total_loss, standard_loss
 
@@ -192,7 +192,7 @@ if __name__ == "__main__":
         }
     )
 
-    dataset = InputPairsDataset(num_samples=100, input_dim=INPUT_DIM)
+    dataset = InputPairsDataset(num_samples=150, input_dim=INPUT_DIM)
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
     # Example usage:
